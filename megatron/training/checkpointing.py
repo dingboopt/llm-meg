@@ -900,7 +900,7 @@ def load_args_from_checkpoint(args, load_arg='load'):
     return args, checkpoint_args
 
 
-def load_checkpoint(model, optimizer, opt_param_scheduler, load_arg='load', strict=True,
+def load_checkpoint(model, optimizer, opt_param_scheduler, load_arg='load', strict=False,
                     ft_client=None):
     """Load a model checkpoint and return the iteration.
     strict (bool): whether to strictly enforce that the keys in
