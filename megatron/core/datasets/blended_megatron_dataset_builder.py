@@ -385,6 +385,11 @@ class BlendedMegatronDatasetBuilder(object):
             List[Optional[MidLevelDataset]]: The MidLevelDataset (or None) per split
         """
         # Build the low level dataset
+        if self.config.with_loss_mask:
+            w = 'text_document'
+            repl = 'loss_mask_document'
+            loss_mask_path_prefix = dataset_path[:-len(w)] + repl
+            low_level_dataset_loss_mask = self.cls.build_low_level_dataset(loss_mask_path_prefix, self.config)
         low_level_dataset = self.cls.build_low_level_dataset(dataset_path, self.config)
 
         # Build the split indices for the low level dataset
@@ -415,6 +420,7 @@ class BlendedMegatronDatasetBuilder(object):
                         sizes[i],
                         _split,
                         self.config,
+                        low_level_dataset_loss_mask,
                     )
                 )
 

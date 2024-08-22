@@ -125,6 +125,14 @@ class _HuggingFaceTokenizer(MegatronTokenizer):
     def eod(self):
         return self._tokenizer.eos_token_id
 
+    @property
+    def bos(self):
+        return self._tokenizer.bos_token_id
+
+    @property
+    def eos(self):
+        return self._tokenizer.eos_token_id
+
 
 class _BertWordPieceTokenizer(MegatronTokenizer):
     """Original BERT wordpiece tokenizer."""

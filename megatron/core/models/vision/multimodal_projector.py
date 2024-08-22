@@ -40,8 +40,8 @@ class MultimodalProjector(MegatronModule):
                 config=config,
                 init_method=config.init_method,
                 gather_output=True,
-                bias=config.add_bias_linear,
-                skip_bias_add=True,
+                bias=True,
+                skip_bias_add=False,
                 is_expert=False,
                 tp_comm_buffer_name=None,
             )

@@ -46,6 +46,11 @@ class GPTDatasetConfig(BlendedMegatronDatasetConfig):
     """Option to draw sequences with one extra token to ensure the sample input tokens and sample
        output tokens are both of the desired sequence length
     """
+        
+    with_loss_mask: bool = False
+    """Option to enable the attention masks generation. Can be disabled if attention kernel
+       generates masks by itself.
+    """
 
     def __post_init__(self) -> None:
         """Do asserts and set fields post init
@@ -84,6 +89,7 @@ class GPTDataset(MegatronDataset):
         num_samples: Optional[int],
         index_split: Split,
         config: GPTDatasetConfig,
+        indexed_dataset_loss_mask=None
     ) -> None:
         super().__init__(
             indexed_dataset, dataset_path, indexed_indices, num_samples, index_split, config
@@ -95,10 +101,15 @@ class GPTDataset(MegatronDataset):
                 self.config.eod_mask_loss,
             ]
         )
+        # todo dont use cache for sft data
+        self.masks_and_position_ids_are_cacheable = False
         self.masks_and_position_ids_are_cached = False
         self.cached_attention_mask = None
         self.cached_loss_mask = None
         self.cached_position_ids = None
+        if config.with_loss_mask:
+            assert indexed_dataset_loss_mask is not None
+            self.indexed_dataset_loss_mask = indexed_dataset_loss_mask
 
         try:
             self._pad_token_id = self.config.tokenizer.pad
@@ -162,15 +173,40 @@ class GPTDataset(MegatronDataset):
             text, _ = self._query_document_sample_shuffle_indices(0)
         else:
             text, _ = self._query_document_sample_shuffle_indices(idx)
+        
+        if self.config.with_loss_mask:
+            loss_mask1, _ = self._query_document_sample_shuffle_indices(idx, True)
 
-        text = torch.from_numpy(text).long()
-        if self.config.add_extra_token_to_sequence:
-            tokens = text[:-1].contiguous()
-            labels = text[1:].contiguous()
+            import numpy as np
+
+            if len(text) >= self.config.sequence_length+1:
+                text = text[:self.config.sequence_length+1]
+                loss_mask1 = loss_mask1[:self.config.sequence_length+1]
+
+            else:
+                ## in simle index [[0,0],[1,0]]---> one more token("below") in samle,wo need text[:-1] to undo this effect 
+                text = np.concatenate([text[:-1], np.array([0] * (self.config.sequence_length - len(text)+2))])
+                loss_mask1 = np.concatenate([loss_mask1[:-1], np.array([0] * (self.config.sequence_length - len(loss_mask1)+2))])
+            
+            text = torch.from_numpy(text)
+            loss_mask1 = torch.from_numpy(loss_mask1)
+
+  
+            tokens_ = text.long()
+            loss_mask1 = loss_mask1.float()
+            labels = tokens_[1:].contiguous()
+            loss_mask1 = loss_mask1[1:].contiguous()
+            tokens = tokens_[:-1].contiguous()
+        
         else:
-            tokens = text
-            labels = torch.roll(text, shifts=-1, dims=0)
-            labels[-1] = self._pad_token_id
+            text = torch.from_numpy(text).long()
+            if self.config.add_extra_token_to_sequence:
+                tokens = text[:-1].contiguous()
+                labels = text[1:].contiguous()
+            else:
+                tokens = text
+                labels = torch.roll(text, shifts=-1, dims=0)
+                labels[-1] = self._pad_token_id
 
         if (
             not self.masks_and_position_ids_are_cacheable
@@ -184,12 +220,16 @@ class GPTDataset(MegatronDataset):
                 self.config.eod_mask_loss,
                 self.config.create_attention_mask,
             )
+            if self.config.with_loss_mask:
+                loss_mask = loss_mask1
             if self.masks_and_position_ids_are_cacheable:
+                rasie
                 self.cached_attention_mask = attention_mask
                 self.cached_loss_mask = loss_mask
                 self.cached_position_ids = position_ids
                 self.masks_and_position_ids_are_cached = True
         else:
+            raise
             attention_mask = self.cached_attention_mask
             loss_mask = self.cached_loss_mask
             position_ids = self.cached_position_ids
@@ -222,7 +262,7 @@ class GPTDataset(MegatronDataset):
             }
 
     def _query_document_sample_shuffle_indices(
-        self, idx: int
+        self, idx: int, is_loss_mask=False
     ) -> Tuple[numpy.ndarray, numpy.ndarray]:
         """Get the text (token ids) and document ids for a given index
 
@@ -241,7 +281,10 @@ class GPTDataset(MegatronDataset):
 
         document_ids = []
         sample_parts = []
-
+        
+        if is_loss_mask:
+            tmp_dataset = self.dataset
+            self.dataset = self.indexed_dataset_loss_mask
         # Sample spans a single document
         if doc_index_beg == doc_index_end:
             # Add the document id
@@ -286,7 +329,8 @@ class GPTDataset(MegatronDataset):
                 [self._pad_token_id]
                 * (self.config.sequence_length + self.config.add_extra_token_to_sequence - length)
             )
-
+        if is_loss_mask:
+            self.dataset = tmp_dataset
         return (
             numpy.concatenate(sample_parts, dtype=numpy.int64),
             numpy.array(document_ids, dtype=numpy.int64),
@@ -357,7 +401,7 @@ class GPTDataset(MegatronDataset):
             num_tokens_per_epoch = self._get_num_tokens_per_epoch()
             num_epochs = self._get_num_epochs(num_tokens_per_epoch)
 
-            if num_epochs == 1:
+            if num_epochs == 1 or self.config.with_loss_mask:
                 separate_final_epoch = False
             else:
                 # Get the number of samples for the last epoch
@@ -426,15 +470,44 @@ class GPTDataset(MegatronDataset):
                 sequence_lengths_for_cpp = self.dataset.sequence_lengths.copy()
             else:
                 sequence_lengths_for_cpp = self.dataset.sequence_lengths
-            sample_index = helpers.build_sample_idx(
-                sequence_lengths_for_cpp,
-                document_index,
-                sequence_length,
-                num_epochs,
-                num_tokens_per_epoch,
-                drop_last_partial_sequence,
-                self.config.add_extra_token_to_sequence,
-            )
+
+            if self.config.with_loss_mask:
+                def _build_sample_idx_prefix(sizes, doc_idx, seq_length,
+                          num_epochs, tokens_per_epoch):
+                    import numpy as np
+                    # Total number of samples. For -1 see comments in `_num_epochs`.
+                    sample_idx = np.zeros([len(doc_idx) + 1, 2], dtype=np.int32)
+                    # Index into sample_idx.
+                    sample_index = 0
+                    # Start with first document and no offset.
+                    
+                    while sample_index < len(doc_idx):
+                        sample_idx[sample_index][0] = sample_index
+                        sample_idx[sample_index][1] = 1
+                        sample_index += 1
+                    # add for last sample (i.e last doc)
+                    #sample_idx[sample_index][0] = doc_idx[sample_index-1]
+                    sample_idx[sample_index][0] = len(doc_idx)-1
+                    sample_idx[sample_index][1] = sizes[doc_idx[-1]]-1
+
+                    return sample_idx
+
+                sample_index = _build_sample_idx_prefix(
+                    self.dataset.sequence_lengths,
+                    document_index,
+                    sequence_length,
+                    num_epochs,
+                    num_tokens_per_epoch)
+            else:
+                sample_index = helpers.build_sample_idx(
+                    sequence_lengths_for_cpp,
+                    document_index,
+                    sequence_length,
+                    num_epochs,
+                    num_tokens_per_epoch,
+                    drop_last_partial_sequence,
+                    self.config.add_extra_token_to_sequence,
+                )
 
             # Build the shuffle index
             if separate_final_epoch:
