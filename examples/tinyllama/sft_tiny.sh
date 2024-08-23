@@ -9,17 +9,18 @@ DATE=`date '+%Y-%m-%d'`
 HOUR=`date '+%H-%M-%S'`
 TAG="$1"
 
-DATASET=data/pie0_14
+# 116486373 samples/epoche; 2048 seq/sample 
+DATASET=/cloudfs-data/db/data/the_pile_deduplicated_tinyllama_tokenized_idx/pie_total
 
-CHECKPOINT_PATH=ckt
-SAVE_CHECKPOINT_PATH=yi34b8tp
+CHECKPOINT_PATH=/cloudfs-data/db/model/TinyLlama_v1.1/
+SAVE_CHECKPOINT_PATH=$TAG
 TOKENIZER_PATH=${CHECKPOINT_PATH}
 TENSORBOARD_PATH=output_dir/tensorboard/$DATE-llama-13b$TAG
 
 
-MICRO_BATCH_SIZE=1
-GLOBAL_BATCH_SIZE=8 # e.g. llama: 4M tokens
-TRAIN_STEPS=1000 # e.g. llama: 1T tokens / 4M tokens_per_batch = 250000 steps
+MICRO_BATCH_SIZE=8
+GLOBAL_BATCH_SIZE=1024 # e.g. llama: 4M tokens
+TRAIN_STEPS=341268 # 116486373 * 3 /1024
 
 # parallel parameter
 TP=1
@@ -35,7 +36,7 @@ FL=true
 # transformer engine
 TE=true
 # precision fp16/bf16/fp8
-PR=fp16
+PR=bf16
 
 
 if [ $AC = full ]; then
@@ -126,17 +127,17 @@ SEQ_LENGTH=2048
 
 
 
-CUSTOM_ARGS=" \
-    --no-load-optim \
-    --finetune \
-    "
+#CUSTOM_ARGS=" \
+#    --no-load-optim \
+#    --finetune \
+#    "
 
 # learning rate and optimizer hyper para 
 #train-iter = total_sample / gbs
 #lr_decay =  train-iter * 0.95
 #warmup = train-iter*0.03
-LR_DECAY_ITERS=999
-LR_WARMUP_ITERS=1
+LR_DECAY_ITERS=340268
+LR_WARMUP_ITERS=1000
 
 OPTIMIZER_ARGS=" \
     --optimizer adam \
@@ -153,7 +154,7 @@ OPTIMIZER_ARGS=" \
     "
 
 
-deepspeed --include=localhost  --no_ssh_check --master_port 60410 \
+deepspeed --hostfile=hostfile  --no_ssh_check --master_port 60410 \
 	pretrain_llama.py \
 	   $CUSTOM_ARGS \
 	   $OPTIMIZER_ARGS \
@@ -166,7 +167,7 @@ deepspeed --include=localhost  --no_ssh_check --master_port 60410 \
 	   ${sp_options} \
 	   ${gqa_options} \
 	   --data-path ${DATASET} 100 \
-	   --split 1000,0,0 \
+	   --split 98,1,1 \
        --micro-batch-size $MICRO_BATCH_SIZE \
        --global-batch-size $GLOBAL_BATCH_SIZE \
        --tensor-model-parallel-size $TP \
@@ -179,13 +180,13 @@ deepspeed --include=localhost  --no_ssh_check --master_port 60410 \
        --max-position-embeddings $SEQ_LENGTH \
        --train-iters $TRAIN_STEPS \
        --save $SAVE_CHECKPOINT_PATH \
-		--initial-loss-scale 1 \
+	   --load $SAVE_CHECKPOINT_PATH \
 	   --tokenizer-model $CHECKPOINT_PATH \
        --tokenizer-type HuggingFaceTokenizer \
 	   --make-vocab-size-divisible-by 4 \
        --distributed-backend nccl \
        --log-interval 1 \
-       --save-interval 500 \
+       --save-interval 1000 \
        --eval-interval 1000 \
        --eval-iters 10 \
    	   --seed 42 \
@@ -202,4 +203,4 @@ deepspeed --include=localhost  --no_ssh_check --master_port 60410 \
 		--log-timers-to-tensorboard \
 		--ckpt-format torch \
 		--log-validation-ppl-to-tensorboard \
-      2>&1 |tee sft_llama2.log
+      2>&1 |tee ${TAG}_${DATE}_${HOUR}.log

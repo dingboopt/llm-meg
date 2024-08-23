@@ -87,6 +87,7 @@ def add_args(parser):
     )
 
     parser.add_argument("--print-checkpoint-structure", action="store_true")
+    parser.add_argument("--auto-remove-opt", action="store_true")
 
     return parser
 
@@ -580,12 +581,15 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     import glob
     if glob.glob(args.load_path + "/mp_rank*/distrib*"):
         # if os.path.exists(args.load_path+"/mp_rank*/distrib*"):
-        user_input = input(
-            "Optimizer states detected. Will remove distrib* files. yes (remove and continue) / no (stop programme): ")
-        if user_input == 'yes':
+        if args.auto_remove_opt:
             os.system("rm -rf " + args.load_path + "/mp_rank*/distrib*")
         else:
-            raise RuntimeError("Optimizer states are not removed. Save files to another folder and re-run.")
+            user_input = input(
+                "Optimizer states detected. Will remove distrib* files. yes (remove and continue) / no (stop programme): ")
+            if user_input == 'yes':
+                os.system("rm -rf " + args.load_path + "/mp_rank*/distrib*")
+            else:
+                raise RuntimeError("Optimizer states are not removed. Save files to another folder and re-run.")
 
     # params dtype
     if args.target_params_dtype == "fp16":
