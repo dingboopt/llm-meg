@@ -11,7 +11,7 @@ TAG="$1"
 
 DATASET=/cloudfs-data/db/data/voicegpt_total/
 
-CHECKPOINT_PATH=test
+CHECKPOINT_PATH=/cloudfs/db/cw-megatron.bak/examples/voice_gpt/ss
 SAVE_CHECKPOINT_PATH=${TAG}
 TOKENIZER_PATH=${CHECKPOINT_PATH}
 TENSORBOARD_PATH=output_dir/tensorboard/$DATE-llama-13b$TAG
@@ -205,4 +205,5 @@ deepspeed --include=localhost  --no_ssh_check --master_port 60411 \
 		--log-timers-to-tensorboard \
 		--log-batch-size-to-tensorboard \
 		--log-validation-ppl-to-tensorboard \
+		--adapter-list  affine:1280 linear+mlp:1280 \
       2>&1 |tee sft_llama2$TAG.log

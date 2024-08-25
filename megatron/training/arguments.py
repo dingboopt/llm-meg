@@ -1531,6 +1531,8 @@ def _add_data_args(parser):
                        'end-of-document token.')
     group.add_argument('--eod-mask-loss', action='store_true',
                        help='Mask loss for the end of document tokens.')
+    group.add_argument('--adapter-list', nargs='+', default=[],
+                        help='adapter list. format: tyep:hidden_size')
     group.add_argument('--with-loss-mask', action='store_true',
                        help='with loss mask as input.')
     group.add_argument('--learning-rate-boost-list', nargs='+', default=[])

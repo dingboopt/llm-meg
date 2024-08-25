@@ -21,6 +21,7 @@ from megatron.core.models.gpt.gpt_model import GPTModel
 from megatron.core.transformer import MegatronModule
 from megatron.core.transformer.mlp import MLP, MLPSubmodules
 from megatron.core.models.vision.multimodal_projector import MultimodalProjector
+from megatron.core.tensor_parallel.layers import ColumnParallelLinear, RowParallelLinear
 from typing import List
 from collections import namedtuple
 
@@ -58,6 +59,7 @@ class VoiceGpt(MegatronModule):
         position_embedding_type: Literal['learned_absolute', 'rope'] = 'learned_absolute',
         rotary_percent: float = 1.0,
         rotary_base: int = 10000,
+        **kwargs
 
     ) -> None:
         super().__init__(config=config)
@@ -77,18 +79,26 @@ class VoiceGpt(MegatronModule):
         # Map (intermediate) vision model outputs to the language model input dimension.
 
         
+        # one adapter for now
+        adapter = kwargs['adapter_list'][0]
+        adapter_type, input_size = adapter.split(':')
+        input_size = int(input_size)
 
-        from megatron.core.tensor_parallel.layers import ColumnParallelLinear, RowParallelLinear
+            
+        
 
-        vision_projection_layer_spec = MLPSubmodules (linear_fc1=ColumnParallelLinear)
+        vision_projection_layer_spec = MLPSubmodules(
+            linear_fc1=ColumnParallelLinear,
+            linear_fc2=RowParallelLinear,
+        )
         
 
         self.vision_projection = MultimodalProjector(
             config,
             vision_projection_layer_spec,
-            'affine',
+            adapter_type,
             # whisper hidden size 1280
-            1280,  # input size to the projection.
+            input_size,  # input size to the projection.
         )
 
 
