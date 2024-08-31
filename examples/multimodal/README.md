@@ -18,6 +18,10 @@ You can build a docker container using `examples/multimodal/Dockerfile` to run t
 
 Follow the instructions in `megatron-lm/docs/llama_mistral.md` to download weights for Mistral-7B-Instruct-v0.3 and convert to mcore format with tensor parallel size 4
 
+```
+python tools/checkpoint/convert.py    --model-type GPT    --loader llama_mistral    --saver mcore    --target-tensor-parallel-size 4    --checkpoint-type hf --load-dir /cloudfs-data/db/model/Mistral-7B-Instruct-v0.3/ --save-dir mistral --tokenizer-model /cloudfs-data/db/model/Mistral-7B-Instruct-v0.3/ --model-size mistral-7B
+```
+
 ### Vision model
 
 This example uses the OpenAI CLIP `ViT-L/14@336px` Vision model. To download the weights from OpenAI and convert them to a format that can be loaded in megatron, please run the following:
@@ -80,6 +84,20 @@ examples/multimodal/combine_mistral_clip.sh /path/to/mistral/model /path/to/clip
     ```
     cd <megatron-lm dir>
     examples/multimodal/pretrain_mistral_clip.sh
+    ```
+    for single node:
+    ```
+    WORKSPACE=. LOAD_NAME=LLVA_PRETRAIN  TOKENIZER_MODEL=mistral  examples/multimodal/pretrain_mistral_clip.sh
+    ```
+    
+    for multi node:
+    node1:
+    ```
+    NUM_NODES=2 MASTER_ADDR=llm030 NODE_RANK=0 WORKSPACE=. LOAD_NAME=LLVA_PRETRAIN  TOKENIZER_MODEL=mistral  examples/multimodal/pretrain_mistral_clip.sh
+    ```
+    node2:
+    ```
+    NUM_NODES=2 MASTER_ADDR=llm030 NODE_RANK=1 WORKSPACE=. LOAD_NAME=LLVA_PRETRAIN  TOKENIZER_MODEL=mistral  examples/multimodal/pretrain_mistral_clip.sh
     ```
 
 All being well you should observe training and validation loss curves similar to the following:

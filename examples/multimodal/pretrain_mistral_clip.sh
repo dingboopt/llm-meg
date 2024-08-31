@@ -1,5 +1,6 @@
 #!/bin/bash
 # Pretrain a multimodal model.
+set -x
 
 export NCCL_IB_SL=1
 export CUDA_DEVICE_MAX_CONNECTIONS=1
@@ -11,8 +12,14 @@ if [[ -z $WORKSPACE ]]; then
     exit 1
 fi
 
+DATE=`date '+%Y-%m-%d'`                                                                                                                                                                                      
+HOUR=`date '+%H-%M-%S'`
+
+
 SOURCE=`pwd`
 OUTPUT_BASE="${WORKSPACE}/output"
+#OUTPUT_BASE="${WORKSPACE}/output${DATE}_${HOUR}"
+
 OUTPUT="${OUTPUT_BASE}/${MODEL_NAME}"
 
 FINETUNE_DIR=${OUTPUT}/checkpoints
@@ -29,7 +36,7 @@ if [[ -z $TOKENIZER_MODEL ]]; then
     exit 1
 fi
 
-CHECKPOINT_DIR="${WORKSPACE}/${LOAD_NAME}/checkpoints"
+CHECKPOINT_DIR="${WORKSPACE}/${LOAD_NAME}/mistral_instruct_clip336_tp4_combined_mcore"
 
 DATA_TRAIN="${SOURCE}/examples/multimodal/pretrain_dataset.yaml"
 DATA_VALID="${SOURCE}/examples/multimodal/pretrain_dataset.yaml"
@@ -46,7 +53,7 @@ else
     BZ=256
     NW=2
     HD=0.1
-    LI=10
+    LI=1
     EXTRA_ARGS=""
     NONDETERMINISTIC_ATTN=1
 fi
@@ -63,7 +70,6 @@ OPTIONS=" \
     --num-query-groups 8 \
     --no-masked-softmax-fusion \
     --num-workers ${NW} \
-    --exit-duration-in-mins 230 \
     --use-flash-attn \
     --untie-embeddings-and-output-weights \
     --disable-bias-linear \
@@ -82,7 +88,7 @@ OPTIONS=" \
     --max-position-embeddings 4096 \
     --ffn-hidden-size 14336 \
     --train-iters 20000 \
-    --micro-batch-size 1 \
+    --micro-batch-size 8 \
     --global-batch-size ${BZ} \
     --lr-decay-iters 20000 \
     --lr-warmup-fraction .01 \
@@ -124,9 +130,44 @@ OPTIONS=" \
     ${EXTRA_ARGS} \
     --distributed-timeout-minutes 60 \
     --allow-missing-vision-projection-checkpoint \
-"
+	--ckpt-format torch \
+	
 
+"
+# dump config and in/out tensor
+#--config-logger-dir ${OUTPUT}/config/ \
 export NVTE_APPLY_QK_LAYER_SCALING=0
 export NVTE_ALLOW_NONDETERMINISTIC_ALGO=${NONDETERMINISTIC_ATTN}
 
-torchrun --nproc_per_node 8 examples/multimodal/train.py ${OPTIONS}
+GPUS_PER_NODE=8
+mkdir -p ${OUTPUT}/logs/$NODE_RANK
+
+if [ -z $NUM_NODES ] || [ "$NUM_NODES" -le 1 ]; then
+	echo "One node!!!!!!!!!."
+	torchrun --nproc_per_node $GPUS_PER_NODE examples/multimodal/train.py ${OPTIONS} 2>&1| tee ${OUTPUT}/logs/log
+else
+	echo "multi nodes   ######."
+	export CUDA_DEVICE_MAX_CONNECTIONS=1
+	export GLOO_SOCKET_IFNAME=ens22f0np0
+
+	# Change for multinode config
+	MASTER_ADDR=$MASTER_ADDR
+	MASTER_PORT=60235
+	#NUM_NODES=2
+	NODE_RANK=$NODE_RANK
+	WORLD_SIZE=$(($GPUS_PER_NODE*$NUM_NODES))
+
+
+	DISTRIBUTED_ARGS=(
+	    --nproc_per_node $GPUS_PER_NODE 
+	    --nnodes $NUM_NODES 
+	    --master_addr $MASTER_ADDR 
+		--node-rank $NODE_RANK
+	    --master_port $MASTER_PORT
+	)
+
+
+
+	torchrun ${DISTRIBUTED_ARGS[@]} examples/multimodal/train.py ${OPTIONS} 2>&1| tee ${OUTPUT}/logs/$NODE_RANK/log
+fi
+
