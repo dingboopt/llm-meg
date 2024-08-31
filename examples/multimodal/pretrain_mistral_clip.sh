@@ -88,7 +88,7 @@ OPTIONS=" \
     --max-position-embeddings 4096 \
     --ffn-hidden-size 14336 \
     --train-iters 20000 \
-    --micro-batch-size 8 \
+    --micro-batch-size 4 \
     --global-batch-size ${BZ} \
     --lr-decay-iters 20000 \
     --lr-warmup-fraction .01 \
@@ -142,7 +142,11 @@ export NVTE_ALLOW_NONDETERMINISTIC_ALGO=${NONDETERMINISTIC_ATTN}
 GPUS_PER_NODE=8
 mkdir -p ${OUTPUT}/logs/$NODE_RANK
 
-if [ -z $NUM_NODES ] || [ "$NUM_NODES" -le 1 ]; then
+if [ ! -z $DS ]; then
+	echo "************. use deepspeed ********************."
+	deepspeed --hostfile=hostfile  --no_ssh_check --master_port 60410  examples/multimodal/train.py ${OPTIONS} 2>&1| tee ${OUTPUT}/logs/log
+
+elif [ -z $NUM_NODES ] || [ "$NUM_NODES" -le 1 ]; then
 	echo "One node!!!!!!!!!."
 	torchrun --nproc_per_node $GPUS_PER_NODE examples/multimodal/train.py ${OPTIONS} 2>&1| tee ${OUTPUT}/logs/log
 else

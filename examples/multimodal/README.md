@@ -99,6 +99,11 @@ examples/multimodal/combine_mistral_clip.sh /path/to/mistral/model /path/to/clip
     ```
     NUM_NODES=2 MASTER_ADDR=llm030 NODE_RANK=1 WORKSPACE=. LOAD_NAME=LLVA_PRETRAIN  TOKENIZER_MODEL=mistral  examples/multimodal/pretrain_mistral_clip.sh
     ```
+    
+    use deepspeed:
+    ```
+    DS=1 WORKSPACE=. LOAD_NAME=LLVA_PRETRAIN  TOKENIZER_MODEL=mistral  examples/multimodal/pretrain_mistral_clip.sh
+    ```
 
 All being well you should observe training and validation loss curves similar to the following:
 
