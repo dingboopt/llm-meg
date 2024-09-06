@@ -265,10 +265,25 @@ def pretrain(
     one_logger_utils.on_pretrain_start()
 
     # Model, optimizer, and learning rate.
+    lr_mult = int(args.learning_rate_boost_mult_value)
+    def scale_lr_cond(name, param):
+        for item in args.learning_rate_boost_list:
+            if item in name:
+                print_rank_0(f'{name} set to {lr_mult}X learning rate')
+                return True
+        return False
+    
+    def no_weight_decay_cond(name, param):
+        for item in args.no_weight_decay_list:
+            if item in name:
+                print_rank_0(f'{name} set to no weight decay')
+                return True
+        return False
+
     timers('model-and-optimizer-setup', log_level=0).start(barrier=True)
     app_metrics['app_build_optimizer_start_time'] = one_logger_utils.get_timestamp_in_ms()
     model, optimizer, opt_param_scheduler = setup_model_and_optimizer(
-        model_provider, model_type)
+        model_provider, model_type, no_weight_decay_cond, scale_lr_cond,lr_mult)
 
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '

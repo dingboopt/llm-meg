@@ -33,6 +33,8 @@ import braceexpand
 import torch
 import webdataset
 import yaml
+import soundfile as sf
+from io import BytesIO
 
 from megatron.energon.dataset_config import MAIN_FOLDER_NAME
 from megatron.energon.epathlib import EPath
@@ -856,12 +858,25 @@ class DefaultDecoderWebdataset(DefaultGenericWebdataset[T_sample], Generic[T_sam
                 info=video[2],
             )
         return None
+    
+    def _audio_decoder(self, key, data):
+        """Extract the video data from default video extensions."""
+
+        if key.endswith('.wav'):
+            byte_io = BytesIO(data)
+            waveform, _ =sf.read(byte_io)
+            return waveform
+      
+        return None
+
+
 
     def _process_samples(self, dataset: SavableDataset[FilteredSample]) -> SavableDataset[T_sample]:
 
         decoder = webdataset.decode(
             self.image_decode,
             self._video_decoder,
+            self._audio_decoder,
             handler=self._decode_error_handler,
         )
         dataset = IterMapDataset(
