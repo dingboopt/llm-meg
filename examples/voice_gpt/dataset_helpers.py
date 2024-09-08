@@ -208,7 +208,7 @@ class TaskEncoder(DefaultTaskEncoder[OCRSample, OCRSample, ImageTaskBatch, dict]
 
         answer_token = self.tokenizer(sample.context)
         # add IMAGE_TOKEN_INDEX
-        prompt_len = len(pre_audio_token) + 1 + len(after_audio_token) 
+        prompt_len = len(pre_audio_token) + 1 + len(after_audio_token) - 1 
 
         seq_len = self.max_seq_len + 4
 

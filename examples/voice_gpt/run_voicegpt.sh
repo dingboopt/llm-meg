@@ -17,9 +17,9 @@ TOKENIZER_PATH=${CHECKPOINT_PATH}
 TENSORBOARD_PATH=output_dir/tensorboard/$DATE-llama-13b$TAG
 
 
-MICRO_BATCH_SIZE=1
-GLOBAL_BATCH_SIZE=16 # e.g. llama: 4M tokens
-TRAIN_STEPS=10500 # e.g. llama: 1T tokens / 4M tokens_per_batch = 250000 steps
+MICRO_BATCH_SIZE=4
+GLOBAL_BATCH_SIZE=64 # e.g. llama: 4M tokens
+TRAIN_STEPS=2 # e.g. llama: 1T tokens / 4M tokens_per_batch = 250000 steps
 
 # parallel parameter
 TP=4
@@ -119,7 +119,7 @@ gqa_options=" \
 		    --num-query-groups 4"
 
 
-SEQ_LENGTH=4096
+SEQ_LENGTH=2048
 
 
 
@@ -177,7 +177,7 @@ deepspeed --include=localhost  --no_ssh_check --master_port 60411 \
        --ffn-hidden-size $INTERMEDIATE_SIZE \
        --num-attention-heads $NUM_ATTN_HEADS \
        --seq-length $SEQ_LENGTH \
-       --max-position-embeddings $SEQ_LENGTH \
+       --max-position-embeddings 4096 \
        --train-iters $TRAIN_STEPS \
        --save $SAVE_CHECKPOINT_PATH \
        --load $CHECKPOINT_PATH \
@@ -187,6 +187,7 @@ deepspeed --include=localhost  --no_ssh_check --master_port 60411 \
        --distributed-backend nccl \
        --log-interval 1 \
        --save-interval 500 \
+	   --ckpt-format torch \
        --eval-interval 1000 \
        --eval-iters 10 \
    	   --seed 42 \
@@ -207,5 +208,5 @@ deepspeed --include=localhost  --no_ssh_check --master_port 60411 \
 		--dataloader-type external \
 		--encoder-path /cloudfs-data/db/model/large-v3/ \
 		--log-validation-ppl-to-tensorboard \
-		--adapter-list  linear+mlp:1280 affine:1280 \
+		--adapter-list  affine:1280 linear+mlp:1280 \
       2>&1 |tee sft_llama2$TAG.log
