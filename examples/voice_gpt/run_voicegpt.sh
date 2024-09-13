@@ -11,7 +11,7 @@ TAG="$1"
 
 DATASET=/cloudfs/db/Megatron-LM/examples/voice_gpt/pretrain_dataset.yaml
 
-CHECKPOINT_PATH=/cloudfs/db/Megatron-LM/examples/voice_gpt/test
+CHECKPOINT_PATH=test
 SAVE_CHECKPOINT_PATH=${TAG}
 TOKENIZER_PATH=${CHECKPOINT_PATH}
 TENSORBOARD_PATH=output_dir/tensorboard/$DATE-llama-13b$TAG
@@ -109,10 +109,10 @@ fi
 
 # model parameter
 
-NUM_LAYERS=32
-HIDDEN_SIZE=4096
-NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=11008
+NUM_LAYERS=28
+HIDDEN_SIZE=3584
+NUM_ATTN_HEADS=28
+INTERMEDIATE_SIZE=18944
 
 gqa_options=" \
 		    --group-query-attention \
@@ -193,7 +193,8 @@ deepspeed --include=localhost  --no_ssh_check --master_port 60411 \
    	   --seed 42 \
        --attention-dropout 0 \
        --hidden-dropout 0 \
-	   --rotary-base 5000000 \
+	   --add-qkv-bias \
+	   --rotary-base 1000000 \
        --use-rotary-position-embeddings \
        --untie-embeddings-and-output-weights \
 	   --distributed-timeout-minutes 1 \

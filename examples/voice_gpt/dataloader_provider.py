@@ -104,7 +104,7 @@ def train_valid_test_dataloaders_provider(train_val_test_num_samples):
     ]
     test_dataloader = None
 
-    return EnergonDataloader(train_dataloader), valid_dataloader, EnergonDataloader(test_dataloader)
+    return EnergonDataloader(train_dataloader), valid_dataloader, None
 
 
 class EnergonDataloader:
